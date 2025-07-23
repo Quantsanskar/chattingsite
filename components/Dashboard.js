@@ -42,15 +42,25 @@ export default function Dashboard({ user, onLogout }) {
     }
   }, [])
 
+  // Add safety check for user
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+      </div>
+    )
+  }
+
   const fetchChats = async () => {
     try {
       const response = await fetch("/api/chats")
       if (response.ok) {
         const data = await response.json()
-        setChats(data.chats || [])
+        setChats(Array.isArray(data.chats) ? data.chats : [])
       }
     } catch (error) {
       console.error("Failed to fetch chats:", error)
+      setChats([])
     }
   }
 
@@ -62,10 +72,14 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch("/api/connections/requests")
       if (response.ok) {
         const data = await response.json()
-        setConnectionRequests(data)
+        setConnectionRequests({
+          received: Array.isArray(data.received) ? data.received : [],
+          sent: Array.isArray(data.sent) ? data.sent : [],
+        })
       }
     } catch (error) {
       console.error("Failed to fetch connection requests:", error)
+      setConnectionRequests({ received: [], sent: [] })
     } finally {
       setIsLoadingRequests(false)
     }
@@ -84,7 +98,7 @@ export default function Dashboard({ user, onLogout }) {
       const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`)
       if (response.ok) {
         const data = await response.json()
-        setSearchResults(data.users || [])
+        setSearchResults(Array.isArray(data.users) ? data.users : [])
       }
     } catch (error) {
       console.error("Search failed:", error)
@@ -138,8 +152,10 @@ export default function Dashboard({ user, onLogout }) {
 
       if (response.ok) {
         const data = await response.json()
-        setActiveChat(data.chat)
-        setActiveTab("chats")
+        if (data.chat) {
+          setActiveChat(data.chat)
+          setActiveTab("chats")
+        }
       }
     } catch (error) {
       console.error("Failed to start chat:", error)
@@ -198,11 +214,11 @@ export default function Dashboard({ user, onLogout }) {
             <Avatar className="w-12 h-12 border-2 border-purple-400">
               <AvatarImage src={user.avatar || "/placeholder.svg"} />
               <AvatarFallback className="bg-purple-600 text-white">
-                {user.username.charAt(0).toUpperCase()}
+                {user.username?.charAt(0)?.toUpperCase() || "U"}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="text-2xl font-bold text-white">Welcome, {user.username}</h1>
+              <h1 className="text-2xl font-bold text-white">Welcome, {user.username || "User"}</h1>
               <p className="text-gray-300">Ready to connect and chat?</p>
             </div>
           </div>
@@ -250,36 +266,42 @@ export default function Dashboard({ user, onLogout }) {
                   ) : (
                     <ScrollArea className="h-96">
                       <div className="space-y-3">
-                        {chats.map((chat) => (
-                          <div
-                            key={chat.id}
-                            onClick={() => setActiveChat(chat)}
-                            className="flex items-center space-x-4 p-4 bg-white/5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
-                          >
-                            <div className="relative">
-                              <Avatar className="w-12 h-12">
-                                <AvatarImage src={chat.participant.avatar || "/placeholder.svg"} />
-                                <AvatarFallback className="bg-purple-600 text-white">
-                                  {chat.participant.username.charAt(0).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              {chat.participant.isOnline && (
-                                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <h4 className="font-semibold text-white truncate">{chat.participant.username}</h4>
-                                <span className="text-xs text-gray-400">
-                                  {new Date(chat.updatedAt).toLocaleDateString()}
-                                </span>
+                        {chats.map((chat) => {
+                          if (!chat || !chat.id || !chat.participant) return null
+
+                          return (
+                            <div
+                              key={chat.id}
+                              onClick={() => setActiveChat(chat)}
+                              className="flex items-center space-x-4 p-4 bg-white/5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                            >
+                              <div className="relative">
+                                <Avatar className="w-12 h-12">
+                                  <AvatarImage src={chat.participant.avatar || "/placeholder.svg"} />
+                                  <AvatarFallback className="bg-purple-600 text-white">
+                                    {chat.participant.username?.charAt(0)?.toUpperCase() || "U"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {chat.participant.isOnline && (
+                                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+                                )}
                               </div>
-                              <p className="text-sm text-gray-400 truncate">
-                                {chat.lastMessage?.content || "Start a conversation..."}
-                              </p>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-semibold text-white truncate">
+                                    {chat.participant.username || "Unknown User"}
+                                  </h4>
+                                  <span className="text-xs text-gray-400">
+                                    {chat.updatedAt ? new Date(chat.updatedAt).toLocaleDateString() : ""}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-400 truncate">
+                                  {chat.lastMessage?.content || "Start a conversation..."}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </ScrollArea>
                   )}
@@ -307,56 +329,60 @@ export default function Dashboard({ user, onLogout }) {
                   {searchResults.length > 0 && (
                     <ScrollArea className="h-96">
                       <div className="space-y-3">
-                        {searchResults.map((foundUser) => (
-                          <div
-                            key={foundUser._id}
-                            className="flex items-center justify-between p-4 bg-white/5 rounded-lg"
-                          >
-                            <div className="flex items-center space-x-4">
-                              <div className="relative">
-                                <Avatar className="w-12 h-12">
-                                  <AvatarImage src={foundUser.avatar || "/placeholder.svg"} />
-                                  <AvatarFallback className="bg-purple-600 text-white">
-                                    {foundUser.username.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                {foundUser.isOnline && (
-                                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+                        {searchResults.map((foundUser) => {
+                          if (!foundUser || !foundUser._id) return null
+
+                          return (
+                            <div
+                              key={foundUser._id}
+                              className="flex items-center justify-between p-4 bg-white/5 rounded-lg"
+                            >
+                              <div className="flex items-center space-x-4">
+                                <div className="relative">
+                                  <Avatar className="w-12 h-12">
+                                    <AvatarImage src={foundUser.avatar || "/placeholder.svg"} />
+                                    <AvatarFallback className="bg-purple-600 text-white">
+                                      {foundUser.username?.charAt(0)?.toUpperCase() || "U"}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  {foundUser.isOnline && (
+                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+                                  )}
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold text-white">{foundUser.username || "Unknown User"}</h4>
+                                  <p className="text-sm text-gray-400">{foundUser.email || ""}</p>
+                                  {foundUser.bio && <p className="text-xs text-gray-500 mt-1">{foundUser.bio}</p>}
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Badge className={`${getStatusColor(foundUser.connectionStatus)} text-white`}>
+                                  {getStatusText(foundUser.connectionStatus)}
+                                </Badge>
+                                {foundUser.connectionStatus === "none" && (
+                                  <Button
+                                    onClick={() => sendConnectionRequest(foundUser._id)}
+                                    size="sm"
+                                    className="bg-purple-600 hover:bg-purple-700 text-white"
+                                  >
+                                    <UserPlus className="w-4 h-4 mr-1" />
+                                    Connect
+                                  </Button>
+                                )}
+                                {foundUser.connectionStatus === "connected" && (
+                                  <Button
+                                    onClick={() => startChat(foundUser._id)}
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                  >
+                                    <MessageCircle className="w-4 h-4 mr-1" />
+                                    Chat
+                                  </Button>
                                 )}
                               </div>
-                              <div>
-                                <h4 className="font-semibold text-white">{foundUser.username}</h4>
-                                <p className="text-sm text-gray-400">{foundUser.email}</p>
-                                {foundUser.bio && <p className="text-xs text-gray-500 mt-1">{foundUser.bio}</p>}
-                              </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <Badge className={`${getStatusColor(foundUser.connectionStatus)} text-white`}>
-                                {getStatusText(foundUser.connectionStatus)}
-                              </Badge>
-                              {foundUser.connectionStatus === "none" && (
-                                <Button
-                                  onClick={() => sendConnectionRequest(foundUser._id)}
-                                  size="sm"
-                                  className="bg-purple-600 hover:bg-purple-700 text-white"
-                                >
-                                  <UserPlus className="w-4 h-4 mr-1" />
-                                  Connect
-                                </Button>
-                              )}
-                              {foundUser.connectionStatus === "connected" && (
-                                <Button
-                                  onClick={() => startChat(foundUser._id)}
-                                  size="sm"
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                >
-                                  <MessageCircle className="w-4 h-4 mr-1" />
-                                  Chat
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </ScrollArea>
                   )}
@@ -391,47 +417,53 @@ export default function Dashboard({ user, onLogout }) {
                     ) : (
                       <ScrollArea className="h-64">
                         <div className="space-y-3">
-                          {connectionRequests.received.map((request) => (
-                            <div
-                              key={request._id}
-                              className="flex items-center justify-between p-4 bg-white/5 rounded-lg"
-                            >
-                              <div className="flex items-center space-x-4">
-                                <Avatar className="w-12 h-12">
-                                  <AvatarImage src={request.from.avatar || "/placeholder.svg"} />
-                                  <AvatarFallback className="bg-purple-600 text-white">
-                                    {request.from.username.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <h4 className="font-semibold text-white">{request.from.username}</h4>
-                                  <p className="text-sm text-gray-400">{request.from.email}</p>
-                                  <p className="text-xs text-gray-500">
-                                    Sent {new Date(request.receivedAt).toLocaleDateString()}
-                                  </p>
+                          {connectionRequests.received.map((request) => {
+                            if (!request || !request._id || !request.from) return null
+
+                            return (
+                              <div
+                                key={request._id}
+                                className="flex items-center justify-between p-4 bg-white/5 rounded-lg"
+                              >
+                                <div className="flex items-center space-x-4">
+                                  <Avatar className="w-12 h-12">
+                                    <AvatarImage src={request.from.avatar || "/placeholder.svg"} />
+                                    <AvatarFallback className="bg-purple-600 text-white">
+                                      {request.from.username?.charAt(0)?.toUpperCase() || "U"}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <h4 className="font-semibold text-white">
+                                      {request.from.username || "Unknown User"}
+                                    </h4>
+                                    <p className="text-sm text-gray-400">{request.from.email || ""}</p>
+                                    <p className="text-xs text-gray-500">
+                                      Sent {request.receivedAt ? new Date(request.receivedAt).toLocaleDateString() : ""}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Button
+                                    onClick={() => respondToRequest(request.from._id, "accept")}
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                  >
+                                    <Check className="w-4 h-4 mr-1" />
+                                    Accept
+                                  </Button>
+                                  <Button
+                                    onClick={() => respondToRequest(request.from._id, "reject")}
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-red-500 text-red-400 hover:bg-red-500 hover:text-white"
+                                  >
+                                    <X className="w-4 h-4 mr-1" />
+                                    Decline
+                                  </Button>
                                 </div>
                               </div>
-                              <div className="flex items-center space-x-2">
-                                <Button
-                                  onClick={() => respondToRequest(request.from._id, "accept")}
-                                  size="sm"
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                >
-                                  <Check className="w-4 h-4 mr-1" />
-                                  Accept
-                                </Button>
-                                <Button
-                                  onClick={() => respondToRequest(request.from._id, "reject")}
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-red-500 text-red-400 hover:bg-red-500 hover:text-white"
-                                >
-                                  <X className="w-4 h-4 mr-1" />
-                                  Decline
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </ScrollArea>
                     )}
@@ -451,32 +483,38 @@ export default function Dashboard({ user, onLogout }) {
                     ) : (
                       <ScrollArea className="h-64">
                         <div className="space-y-3">
-                          {connectionRequests.sent.map((request) => (
-                            <div
-                              key={request._id}
-                              className="flex items-center justify-between p-4 bg-white/5 rounded-lg"
-                            >
-                              <div className="flex items-center space-x-4">
-                                <Avatar className="w-12 h-12">
-                                  <AvatarImage src={request.to.avatar || "/placeholder.svg"} />
-                                  <AvatarFallback className="bg-purple-600 text-white">
-                                    {request.to.username.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <h4 className="font-semibold text-white">{request.to.username}</h4>
-                                  <p className="text-sm text-gray-400">{request.to.email}</p>
-                                  <p className="text-xs text-gray-500">
-                                    Sent {new Date(request.sentAt).toLocaleDateString()}
-                                  </p>
+                          {connectionRequests.sent.map((request) => {
+                            if (!request || !request._id || !request.to) return null
+
+                            return (
+                              <div
+                                key={request._id}
+                                className="flex items-center justify-between p-4 bg-white/5 rounded-lg"
+                              >
+                                <div className="flex items-center space-x-4">
+                                  <Avatar className="w-12 h-12">
+                                    <AvatarImage src={request.to.avatar || "/placeholder.svg"} />
+                                    <AvatarFallback className="bg-purple-600 text-white">
+                                      {request.to.username?.charAt(0)?.toUpperCase() || "U"}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <h4 className="font-semibold text-white">
+                                      {request.to.username || "Unknown User"}
+                                    </h4>
+                                    <p className="text-sm text-gray-400">{request.to.email || ""}</p>
+                                    <p className="text-xs text-gray-500">
+                                      Sent {request.sentAt ? new Date(request.sentAt).toLocaleDateString() : ""}
+                                    </p>
+                                  </div>
                                 </div>
+                                <Badge className="bg-yellow-500 text-white">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  Pending
+                                </Badge>
                               </div>
-                              <Badge className="bg-yellow-500 text-white">
-                                <Clock className="w-3 h-3 mr-1" />
-                                Pending
-                              </Badge>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </ScrollArea>
                     )}

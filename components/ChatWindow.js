@@ -16,12 +16,14 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
   const messagesEndRef = useRef(null)
   const scrollAreaRef = useRef(null)
 
-  const otherParticipant = chat.participants.find((p) => p._id !== currentUser.id)
+  const otherParticipant = chat?.participants?.find((p) => p._id !== currentUser.id)
 
   useEffect(() => {
     let mounted = true
 
     const fetchMessages = async () => {
+      if (!chat?.id) return
+
       try {
         const response = await fetch(`/api/chats/${chat.id}/messages`)
         if (response.ok && mounted) {
@@ -42,7 +44,7 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
     return () => {
       mounted = false
     }
-  }, [chat.id])
+  }, [chat?.id])
 
   useEffect(() => {
     scrollToBottom()
@@ -50,7 +52,7 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
 
   const sendMessage = async (e) => {
     e.preventDefault()
-    if (!newMessage.trim() || isSending) return
+    if (!newMessage.trim() || isSending || !chat?.id) return
 
     const messageContent = newMessage.trim()
     setNewMessage("")
@@ -83,6 +85,7 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
   }
 
   const formatTime = (timestamp) => {
+    if (!timestamp) return ""
     return new Date(timestamp).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
@@ -90,6 +93,7 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
   }
 
   const formatDate = (timestamp) => {
+    if (!timestamp) return ""
     const date = new Date(timestamp)
     const today = new Date()
     const yesterday = new Date(today)
@@ -105,8 +109,11 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
   }
 
   const groupMessagesByDate = (messages) => {
+    if (!Array.isArray(messages)) return {}
+
     const groups = {}
     messages.forEach((message) => {
+      if (!message?.createdAt) return
       const date = new Date(message.createdAt).toDateString()
       if (!groups[date]) {
         groups[date] = []
@@ -132,19 +139,19 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
                 <div className="flex items-center space-x-3">
                   <div className="relative">
                     <Avatar className="w-10 h-10">
-                      <AvatarImage src={otherParticipant.avatar || "/placeholder.svg"} />
+                      <AvatarImage src={otherParticipant?.avatar || "/placeholder.svg"} />
                       <AvatarFallback className="bg-purple-600 text-white">
-                        {otherParticipant.username.charAt(0).toUpperCase()}
+                        {otherParticipant?.username?.charAt(0)?.toUpperCase() || "U"}
                       </AvatarFallback>
                     </Avatar>
-                    {otherParticipant.isOnline && (
+                    {otherParticipant?.isOnline && (
                       <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
                     )}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white">{otherParticipant.username}</h3>
+                    <h3 className="font-semibold text-white">{otherParticipant?.username || "Unknown User"}</h3>
                     <p className="text-xs text-gray-400">
-                      {otherParticipant.isOnline ? "Online" : `Last seen ${formatDate(otherParticipant.lastSeen)}`}
+                      {otherParticipant?.isOnline ? "Online" : `Last seen ${formatDate(otherParticipant?.lastSeen)}`}
                     </p>
                   </div>
                 </div>
@@ -177,7 +184,7 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
                       <Send className="w-8 h-8 text-gray-400" />
                     </div>
                     <p className="text-gray-400 text-lg">Start the conversation</p>
-                    <p className="text-gray-500">Send a message to {otherParticipant.username}</p>
+                    <p className="text-gray-500">Send a message to {otherParticipant?.username || "this user"}</p>
                   </div>
                 </div>
               ) : (
@@ -193,44 +200,48 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
 
                       {/* Messages for this date */}
                       <div className="space-y-3">
-                        {dateMessages.map((message, index) => {
-                          const isOwnMessage = message.sender._id === currentUser.id
-                          const showAvatar =
-                            !isOwnMessage && (index === 0 || dateMessages[index - 1].sender._id !== message.sender._id)
+                        {Array.isArray(dateMessages) &&
+                          dateMessages.map((message, index) => {
+                            if (!message || !message._id) return null
 
-                          return (
-                            <div
-                              key={message._id}
-                              className={`flex items-end space-x-2 ${isOwnMessage ? "justify-end" : "justify-start"}`}
-                            >
-                              {!isOwnMessage && (
-                                <div className="w-8 h-8 flex-shrink-0">
-                                  {showAvatar && (
-                                    <Avatar className="w-8 h-8">
-                                      <AvatarImage src={message.sender.avatar || "/placeholder.svg"} />
-                                      <AvatarFallback className="bg-purple-600 text-white text-xs">
-                                        {message.sender.username.charAt(0).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                  )}
-                                </div>
-                              )}
+                            const isOwnMessage = message.sender?._id === currentUser.id
+                            const showAvatar =
+                              !isOwnMessage &&
+                              (index === 0 || dateMessages[index - 1]?.sender?._id !== message.sender?._id)
 
+                            return (
                               <div
-                                className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
-                                  isOwnMessage
-                                    ? "bg-purple-600 text-white rounded-br-md"
-                                    : "bg-white/10 text-white rounded-bl-md"
-                                }`}
+                                key={message._id}
+                                className={`flex items-end space-x-2 ${isOwnMessage ? "justify-end" : "justify-start"}`}
                               >
-                                <p className="text-sm">{message.content}</p>
-                                <p className={`text-xs mt-1 ${isOwnMessage ? "text-purple-200" : "text-gray-400"}`}>
-                                  {formatTime(message.createdAt)}
-                                </p>
+                                {!isOwnMessage && (
+                                  <div className="w-8 h-8 flex-shrink-0">
+                                    {showAvatar && (
+                                      <Avatar className="w-8 h-8">
+                                        <AvatarImage src={message.sender?.avatar || "/placeholder.svg"} />
+                                        <AvatarFallback className="bg-purple-600 text-white text-xs">
+                                          {message.sender?.username?.charAt(0)?.toUpperCase() || "U"}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                    )}
+                                  </div>
+                                )}
+
+                                <div
+                                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                                    isOwnMessage
+                                      ? "bg-purple-600 text-white rounded-br-md"
+                                      : "bg-white/10 text-white rounded-bl-md"
+                                  }`}
+                                >
+                                  <p className="text-sm">{message.content || ""}</p>
+                                  <p className={`text-xs mt-1 ${isOwnMessage ? "text-purple-200" : "text-gray-400"}`}>
+                                    {formatTime(message.createdAt)}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
                       </div>
                     </div>
                   ))}
@@ -245,7 +256,7 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
                 <Input
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder={`Message ${otherParticipant.username}...`}
+                  placeholder={`Message ${otherParticipant?.username || "user"}...`}
                   className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-gray-400"
                   disabled={isSending}
                 />
@@ -265,6 +276,28 @@ export default function ChatWindow({ chat, currentUser, onBack }) {
           </CardContent>
         </Card>
       </div>
+      {(!chat || !chat.participants || !Array.isArray(chat.participants) || !currentUser) && (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-white text-lg mb-4">Loading chat...</p>
+            <Button onClick={onBack} className="bg-purple-600 hover:bg-purple-700 text-white">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Go Back
+            </Button>
+          </div>
+        </div>
+      )}
+      {!otherParticipant && (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-white text-lg mb-4">Chat participant not found</p>
+            <Button onClick={onBack} className="bg-purple-600 hover:bg-purple-700 text-white">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Go Back
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
